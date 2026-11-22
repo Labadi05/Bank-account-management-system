@@ -42,7 +42,11 @@ export default class BankAccount {
       return "Enter a valid deposit amount with up to two decimal places.";
     }
 
-    this.balanceCents += cents;
+    if (!Number.isSafeInteger(this.balanceCents + cents)) {
+      return "Deposit exceeds the maximum supported account balance.";
+    }
+
+     this.balanceCents += cents;
 
     this.transactions.push({
       id: this.nextTransactionId++,
