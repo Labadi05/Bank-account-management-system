@@ -1,61 +1,109 @@
-class BankAccount {
+
+export default class BankAccount {
   constructor() {
-    this.balance = 0;
+    // Store money in cents to avoid floating-point errors.
+    this.balanceCents = 0;
     this.transactions = [];
+    this.nextTransactionId = 1;
   }
- 
+
+  // Convert cents into a dollar amount for the interface.
+  get balance() {
+    return this.balanceCents / 100;
+  }
+
+  // Validate and convert a dollar amount into cents.
+  convertToCents(amount) {
+    if (
+      typeof amount !== "number" ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      return null;
+    }
+
+    const cents = Math.round(amount * 100);
+
+    // Reject amounts with more than two decimal places.
+    if (
+      cents > Number.MAX_SAFE_INTEGER ||
+      Math.abs(amount * 100 - cents) > 0.000001
+    ) {
+      return null;
+    }
+
+    return cents;
+  }
+
   deposit(amount) {
-    if (amount > 0) {
-      this.transactions.push({ type: "deposit", amount: amount, date: new Date() });
-      this.balance += amount;
-      return `Successfully deposited $${amount}. New balance: $${this.balance}`;
-    } else {
-      return "Deposit amount must be greater than zero.";
+    const cents = this.convertToCents(amount);
+
+    if (cents === null) {
+      return "Enter a valid deposit amount with up to two decimal places.";
     }
+
+    this.balanceCents += cents;
+
+    this.transactions.push({
+      id: this.nextTransactionId++,
+      type: "deposit",
+      amountCents: cents,
+      amount: cents / 100,
+      date: new Date()
+    });
+
+    return `Successfully deposited $${(cents / 100).toFixed(2)}. New balance: $${this.balance.toFixed(2)}`;
   }
- 
+
   withdraw(amount) {
-    if (amount > 0 && amount <= this.balance) {
-      this.transactions.push({ type: "withdraw", amount: amount, date: new Date() });
-      this.balance -= amount;
-      return `Successfully withdrew $${amount}. New balance: $${this.balance}`;
-    } else {
-      return "Insufficient balance or invalid amount.";
+    const cents = this.convertToCents(amount);
+
+    if (cents === null) {
+      return "Enter a valid withdrawal amount with up to two decimal places.";
     }
+
+    if (cents > this.balanceCents) {
+      return "Insufficient balance.";
+    }
+
+    this.balanceCents -= cents;
+
+    this.transactions.push({
+      id: this.nextTransactionId++,
+      type: "withdraw",
+      amountCents: cents,
+      amount: cents / 100,
+      date: new Date()
+    });
+
+    return `Successfully withdrew $${(cents / 100).toFixed(2)}. New balance: $${this.balance.toFixed(2)}`;
   }
- 
+
   checkBalance() {
-    return `Current balance: $${this.balance}`;
+    return `Current balance: $${this.balance.toFixed(2)}`;
   }
- 
+
   listAllDeposits() {
     const deposits = this.transactions
       .filter(transaction => transaction.type === "deposit")
       .map(transaction => transaction.amount);
-    return `Deposits: ${deposits.join(",")}`;
+
+    return `Deposits: ${deposits.join(", ")}`;
   }
- 
+
   listAllWithdrawals() {
     const withdrawals = this.transactions
       .filter(transaction => transaction.type === "withdraw")
       .map(transaction => transaction.amount);
-    return `Withdrawals: ${withdrawals.join(",")}`;
+
+    return `Withdrawals: ${withdrawals.join(", ")}`;
   }
- 
-  // Returns every transaction with a human-readable date, e.g.
-  // "deposit: $200 on 8/21/2026, 3:04:10 PM"
+
   listAllTransactions() {
     return this.transactions
-      .map(t => `${t.type}: $${t.amount} on ${t.date.toLocaleString()}`)
+      .map(transaction =>
+        `${transaction.type}: $${transaction.amount.toFixed(2)} on ${transaction.date.toLocaleString()}`
+      )
       .join(" | ");
   }
 }
- 
-const myAccount = new BankAccount();
-myAccount.deposit(200);
-myAccount.deposit(100);
-myAccount.withdraw(50);
-myAccount.withdraw(30);
-myAccount.deposit(20);
- 
-module.exports = BankAccount;
