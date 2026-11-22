@@ -121,3 +121,37 @@ test("account rejects deposits that exceed the maximum safe balance", () => {
   assert.equal(account.balanceCents, maximumSafeCents);
   assert.equal(account.transactions.length, 0);
 });
+
+
+
+test("listAllDeposits returns only deposit amounts", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+  account.deposit(50);
+
+  assert.equal(account.listAllDeposits(), "Deposits: 100, 50");
+});
+
+test("listAllWithdrawals returns only withdrawal amounts", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+  account.withdraw(20);
+
+  assert.equal(account.listAllWithdrawals(), "Withdrawals: 30, 20");
+});
+
+test("listAllTransactions includes every transaction", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+
+  const history = account.listAllTransactions();
+
+  assert.match(history, /deposit: \$100\.00 on/);
+  assert.match(history, /withdraw: \$30\.00 on/);
+});
