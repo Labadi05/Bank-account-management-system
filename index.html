@@ -44,10 +44,45 @@
 
     <p class="status" id="statusMsg"></p>
 
-    <div class="ledger-head">
-      <h2>Entries</h2>
-      <span class="counts" id="counts">0 entries</span>
-    </div>
+   
+<div class="ledger-head">
+  <h2>Entries</h2>
+  <span class="counts" id="counts">0 entries</span>
+</div>
+
+<div class="ledger-filters">
+  <div class="filter-field">
+    <label for="transactionFilter">Transaction type</label>
+    <select id="transactionFilter">
+      <option value="all">All transactions</option>
+      <option value="deposit">Deposits</option>
+      <option value="withdraw">Withdrawals</option>
+    </select>
+  </div>
+
+  <div class="filter-field">
+    <label for="amountSearch">Search amount</label>
+    <input
+      type="number"
+      id="amountSearch"
+      placeholder="Enter amount"
+      min="0"
+      step="0.01"
+    >
+  </div>
+
+<div class="filter-field">
+  <label for="sortTransactions">Sort by</label>
+  <select id="sortTransactions">
+    <option value="newest">Newest first</option>
+    <option value="oldest">Oldest first</option>
+    <option value="highest">Highest amount</option>
+    <option value="lowest">Lowest amount</option>
+  </select>
+</div>
+
+</div>
+
 
     <table>
       <thead>
