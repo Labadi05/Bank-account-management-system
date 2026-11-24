@@ -111,6 +111,15 @@ filteredTransactions.sort((a, b) => {
           ${transaction.type === "deposit" ? "+" : "−"}${fmtCents(transaction.amountCents)}
         </td>
         <td class="num">${fmtCents(runningBalanceCents)}</td>
+        <td>
+          <button
+            class="btn-delete"
+            data-id="${transaction.id}"
+            type="button"
+         >
+            Delete
+          </button>
+         </td>
       `;
 
       ledgerBody.appendChild(tr);
@@ -223,6 +232,34 @@ document.getElementById("withdrawBtn").addEventListener("click", () => {
     }
   });
 });
+
+// Handle transaction deletion.
+ledgerBody.addEventListener("click", event => {
+  const deleteButton = event.target.closest(".btn-delete");
+
+  if (!deleteButton) {
+    return;
+  }
+
+  const transactionId = Number(deleteButton.dataset.id);
+
+  const confirmed = confirm(
+    "Are you sure you want to delete this transaction?"
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const result = myAccount.deleteTransaction(transactionId);
+
+  const success = result === "Transaction deleted successfully.";
+
+  showStatus(result, success ? "success" : "error");
+
+  render();
+});
+
 
 // Update the ledger when the transaction type changes.
 transactionFilter.addEventListener("change", render);

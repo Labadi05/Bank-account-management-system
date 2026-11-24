@@ -110,4 +110,28 @@ export default class BankAccount {
       )
       .join(" | ");
   }
+deleteTransaction(transactionId) {
+  const transactionIndex = this.transactions.findIndex(
+    transaction => transaction.id === transactionId
+  );
+
+  if (transactionIndex === -1) {
+    return "Transaction not found.";
+  }
+
+  // Remove the selected transaction.
+  this.transactions.splice(transactionIndex, 1);
+
+  // Recalculate the account balance from the remaining history.
+  this.balanceCents = this.transactions.reduce(
+    (balance, transaction) => {
+      return transaction.type === "deposit"
+        ? balance + transaction.amountCents
+        : balance - transaction.amountCents;
+    },
+    0
+  );
+
+  return "Transaction deleted successfully.";
+}
 }

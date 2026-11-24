@@ -192,6 +192,18 @@
 
   .btn-withdraw{ background: var(--withdraw); color: var(--paper); }
   .btn-withdraw:hover{ background: #732f2f; }
+  .btn-delete {
+    background: transparent;
+    color: var(--withdraw);
+    border: 1px solid var(--withdraw);
+    padding: 5px 9px;
+    font-size: 10px;
+  }
+
+.btn-delete:hover {
+  background: var(--withdraw);
+  color: var(--paper);
+}
 
   .status{
     font-family:'IBM Plex Mono', monospace;

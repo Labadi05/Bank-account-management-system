@@ -155,3 +155,43 @@ test("listAllTransactions includes every transaction", () => {
   assert.match(history, /deposit: \$100\.00 on/);
   assert.match(history, /withdraw: \$30\.00 on/);
 });
+
+
+test("deleting a deposit recalculates the account balance", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.deposit(50);
+
+  const transactionId = account.transactions[0].id;
+  const result = account.deleteTransaction(transactionId);
+
+  assert.equal(result, "Transaction deleted successfully.");
+  assert.equal(account.balanceCents, 5000);
+  assert.equal(account.transactions.length, 1);
+});
+
+test("deleting a withdrawal recalculates the account balance", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+
+  const transactionId = account.transactions[1].id;
+  account.deleteTransaction(transactionId);
+
+  assert.equal(account.balanceCents, 10000);
+  assert.equal(account.transactions.length, 1);
+});
+
+test("deleting a transaction that does not exist changes nothing", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+
+  const result = account.deleteTransaction(999);
+
+  assert.equal(result, "Transaction not found.");
+  assert.equal(account.balanceCents, 10000);
+  assert.equal(account.transactions.length, 1);
+});
