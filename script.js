@@ -3,6 +3,64 @@ import BankAccount from "./bank-account.js";
 
 const myAccount = new BankAccount();
 
+const STORAGE_KEY = "bankAccountData";
+
+function loadAccountData() {
+  const savedData = localStorage.getItem(STORAGE_KEY);
+
+  if (!savedData) {
+    return;
+  }
+
+  try {
+    const data = JSON.parse(savedData);
+
+    if (!Array.isArray(data.transactions)) {
+      return;
+    }
+
+    // Restore transactions and convert saved dates back into Date objects.
+    myAccount.transactions = data.transactions.map(transaction => ({
+      ...transaction,
+      date: new Date(transaction.date)
+    }));
+
+    // Recalculate the balance from the restored transaction history.
+    myAccount.balanceCents = myAccount.transactions.reduce(
+      (balance, transaction) => {
+        return transaction.type === "deposit"
+          ? balance + transaction.amountCents
+          : balance - transaction.amountCents;
+      },
+      0
+    );
+
+    // Continue assigning unique transaction IDs.
+    myAccount.nextTransactionId =
+      myAccount.transactions.reduce(
+        (highestId, transaction) => Math.max(highestId, transaction.id),
+        0
+      ) + 1;
+
+  } catch (error) {
+    console.error("Could not load saved account data:", error);
+  }
+}
+
+
+function saveAccountData() {
+  const accountData = {
+    transactions: myAccount.transactions
+  };
+
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(accountData)
+  );
+}
+
+
+
 // Format cents as a dollar amount.
 const fmtCents = cents => `$${(cents / 100).toFixed(2)}`;
 
@@ -202,6 +260,10 @@ function handleTransaction(type) {
     input.value = "";
   }
 
+  if (success) {
+  saveAccountData();
+}
+
   render();
 }
 
@@ -257,6 +319,10 @@ ledgerBody.addEventListener("click", event => {
 
   showStatus(result, success ? "success" : "error");
 
+  if (success) {
+  saveAccountData();
+}
+
   render();
 });
 
@@ -269,4 +335,8 @@ amountSearch.addEventListener("input", render);
 
 sortTransactions.addEventListener("change", render);
 // Display the initial account state.
+// Restore saved account data when the application starts.
+loadAccountData();
+
+// Display the restored account information.
 render();
