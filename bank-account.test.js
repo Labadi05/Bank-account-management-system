@@ -1,0 +1,197 @@
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import BankAccount from "./bank-account.js";
+
+test("a new account starts with a zero balance", () => {
+  const account = new BankAccount();
+
+  assert.equal(account.balanceCents, 0);
+  assert.equal(account.transactions.length, 0);
+});
+
+test("deposit increases the account balance", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+
+  assert.equal(account.balanceCents, 10000);
+});
+
+test("withdrawal decreases the account balance", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+
+  assert.equal(account.balanceCents, 7000);
+});
+
+test("account rejects a zero deposit", () => {
+  const account = new BankAccount();
+
+  account.deposit(0);
+
+  assert.equal(account.balanceCents, 0);
+  assert.equal(account.transactions.length, 0);
+});
+
+test("account rejects a withdrawal greater than its balance", () => {
+  const account = new BankAccount();
+
+  account.deposit(50);
+  account.withdraw(100);
+
+  assert.equal(account.balanceCents, 5000);
+  assert.equal(account.transactions.length, 1);
+});
+
+test("account rejects amounts with more than two decimal places", () => {
+  const account = new BankAccount();
+
+  account.deposit(10.123);
+
+  assert.equal(account.balanceCents, 0);
+  assert.equal(account.transactions.length, 0);
+});
+
+test("deposit and withdrawal preserve accurate cents", () => {
+  const account = new BankAccount();
+
+  account.deposit(0.1);
+  account.deposit(0.2);
+  account.withdraw(0.1);
+
+  assert.equal(account.balanceCents, 20);
+});
+
+
+test("each transaction receives a unique ID", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(25);
+  account.deposit(50);
+
+  const ids = account.transactions.map(transaction => transaction.id);
+
+  assert.deepEqual(ids, [1, 2, 3]);
+});
+
+test("failed transactions do not create transaction records", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(200);
+  account.deposit(-50);
+
+  assert.equal(account.transactions.length, 1);
+  assert.equal(account.balanceCents, 10000);
+});
+
+test("transaction history records the correct types and amounts", () => {
+  const account = new BankAccount();
+
+  account.deposit(75);
+  account.withdraw(25);
+
+  assert.equal(account.transactions[0].type, "deposit");
+  assert.equal(account.transactions[0].amountCents, 7500);
+
+  assert.equal(account.transactions[1].type, "withdraw");
+  assert.equal(account.transactions[1].amountCents, 2500);
+});
+
+
+
+test("account rejects deposits that exceed the maximum safe balance", () => {
+  const account = new BankAccount();
+
+  const maximumSafeCents = Number.MAX_SAFE_INTEGER;
+
+  account.balanceCents = maximumSafeCents;
+
+  const result = account.deposit(0.01);
+
+  assert.equal(
+    result,
+    "Deposit exceeds the maximum supported account balance."
+  );
+
+  assert.equal(account.balanceCents, maximumSafeCents);
+  assert.equal(account.transactions.length, 0);
+});
+
+
+
+test("listAllDeposits returns only deposit amounts", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+  account.deposit(50);
+
+  assert.equal(account.listAllDeposits(), "Deposits: 100, 50");
+});
+
+test("listAllWithdrawals returns only withdrawal amounts", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+  account.withdraw(20);
+
+  assert.equal(account.listAllWithdrawals(), "Withdrawals: 30, 20");
+});
+
+test("listAllTransactions includes every transaction", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+
+  const history = account.listAllTransactions();
+
+  assert.match(history, /deposit: \$100\.00 on/);
+  assert.match(history, /withdraw: \$30\.00 on/);
+});
+
+
+test("deleting a deposit recalculates the account balance", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.deposit(50);
+
+  const transactionId = account.transactions[0].id;
+  const result = account.deleteTransaction(transactionId);
+
+  assert.equal(result, "Transaction deleted successfully.");
+  assert.equal(account.balanceCents, 5000);
+  assert.equal(account.transactions.length, 1);
+});
+
+test("deleting a withdrawal recalculates the account balance", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+  account.withdraw(30);
+
+  const transactionId = account.transactions[1].id;
+  account.deleteTransaction(transactionId);
+
+  assert.equal(account.balanceCents, 10000);
+  assert.equal(account.transactions.length, 1);
+});
+
+test("deleting a transaction that does not exist changes nothing", () => {
+  const account = new BankAccount();
+
+  account.deposit(100);
+
+  const result = account.deleteTransaction(999);
+
+  assert.equal(result, "Transaction not found.");
+  assert.equal(account.balanceCents, 10000);
+  assert.equal(account.transactions.length, 1);
+});

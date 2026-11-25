@@ -1,144 +1,420 @@
-   class BankAccount {
-    constructor() {
-      this.balance = 0;
-      this.transactions = [];
-    }
- 
-    deposit(amount) {
-      if (amount > 0) {
-        this.transactions.push({ type: "deposit", amount: amount, date: new Date() });
-        this.balance += amount;
-        return `Successfully deposited $${amount}. New balance: $${this.balance}`;
-      } else {
-        return "Deposit amount must be greater than zero.";
-      }
-    }
- 
-    withdraw(amount) {
-      if (amount > 0 && amount <= this.balance) {
-        this.transactions.push({ type: "withdraw", amount: amount, date: new Date() });
-        this.balance -= amount;
-        return `Successfully withdrew $${amount}. New balance: $${this.balance}`;
-      } else {
-        return "Insufficient balance or invalid amount.";
-      }
-    }
- 
-    checkBalance() {
-      return `Current balance: $${this.balance}`;
-    }
- 
-    listAllDeposits() {
-      const deposits = this.transactions
-        .filter(t => t.type === "deposit")
-        .map(t => t.amount);
-      return `Deposits: ${deposits.join(",")}`;
-    }
- 
-    listAllWithdrawals() {
-      const withdrawals = this.transactions
-        .filter(t => t.type === "withdraw")
-        .map(t => t.amount);
-      return `Withdrawals: ${withdrawals.join(",")}`;
-    }
+import BankAccount from "./bank-account.js";
+
+const myAccount = new BankAccount();
+
+const STORAGE_KEY = "bankAccountData";
+
+function isValidTransaction(transaction) {
+  return (
+    transaction !== null &&
+    typeof transaction === "object" &&
+    Number.isSafeInteger(transaction.id) &&
+    transaction.id > 0 &&
+    ["deposit", "withdraw"].includes(transaction.type) &&
+    Number.isSafeInteger(transaction.amountCents) &&
+    transaction.amountCents > 0 &&
+    Number.isFinite(Date.parse(transaction.date))
+  );
+}
+
+function loadAccountData() {
+  const savedData = localStorage.getItem(STORAGE_KEY);
+
+  if (!savedData) {
+    return;
   }
- 
-  const myAccount = new BankAccount();
-  myAccount.deposit(200);
-  myAccount.deposit(100);
-  myAccount.withdraw(50);
-  myAccount.withdraw(30);
-  myAccount.deposit(20);
- 
-  // Spread the seeded demo transactions across the past few days so the
-  // dates in the ledger look realistic instead of all matching "now".
-  const seedOffsetsInDays = [4, 3, 2, 1, 0];
-  myAccount.transactions.forEach((t, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - seedOffsetsInDays[i]);
-    t.date = d;
+
+  try {
+    const data = JSON.parse(savedData);
+
+    if (
+      !Array.isArray(data.transactions) ||
+      !data.transactions.every(isValidTransaction) ||
+      new Set(data.transactions.map((transaction) => transaction.id)).size !==
+        data.transactions.length
+    ) {
+      console.error("Saved account data contains invalid transactions.");
+      return;
+    }
+
+    // Restore transactions and convert saved dates back into Date objects.
+    myAccount.transactions = data.transactions.map((transaction) => ({
+      ...transaction,
+      date: new Date(transaction.date),
+    }));
+
+    // Recalculate and validate the restored balance.
+    let restoredBalanceCents = 0;
+
+    for (const transaction of myAccount.transactions) {
+      if (transaction.type === "deposit") {
+        restoredBalanceCents += transaction.amountCents;
+      } else {
+        restoredBalanceCents -= transaction.amountCents;
+      }
+
+      if (
+        !Number.isSafeInteger(restoredBalanceCents) ||
+        restoredBalanceCents < 0
+      ) {
+        console.error("Saved account data contains an invalid balance.");
+        myAccount.transactions = [];
+        myAccount.balanceCents = 0;
+        myAccount.nextTransactionId = 1;
+        return;
+      }
+    }
+
+    myAccount.balanceCents = restoredBalanceCents;
+
+    // Continue assigning unique transaction IDs.
+    const highestId = myAccount.transactions.reduce(
+      (highest, transaction) => Math.max(highest, transaction.id),
+      0,
+    );
+
+    if (!Number.isSafeInteger(highestId + 1)) {
+      console.error("Cannot safely generate the next transaction ID.");
+      myAccount.transactions = [];
+      myAccount.balanceCents = 0;
+      myAccount.nextTransactionId = 1;
+      return;
+    }
+
+    myAccount.nextTransactionId = highestId + 1;
+  } catch (error) {
+    console.error("Could not load saved account data:", error);
+  }
+}
+
+function saveAccountData() {
+  const accountData = {
+    transactions: myAccount.transactions,
+  };
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(accountData));
+}
+
+// Format cents as a dollar amount.
+const fmtCents = (cents) => `$${(cents / 100).toFixed(2)}`;
+
+// Format transaction dates.
+const fmtDate = (date) =>
+  date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
- 
-  const fmt = n => `$${n.toFixed(2)}`;
-  const fmtDate = d => d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
- 
-  const balanceEl = document.getElementById('balanceAmount');
-  const ledgerBody = document.getElementById('ledgerBody');
-  const emptyState = document.getElementById('emptyState');
-  const countsEl = document.getElementById('counts');
-  const statusEl = document.getElementById('statusMsg');
-  const depositTotalEl = document.getElementById('depositTotal');
-  const withdrawTotalEl = document.getElementById('withdrawTotal');
- 
-  function render() {
-    balanceEl.textContent = fmt(myAccount.balance);
- 
-    ledgerBody.innerHTML = '';
-    let running = 0;
-    myAccount.transactions.forEach((t, i) => {
-      running += t.type === 'deposit' ? t.amount : -t.amount;
-      const tr = document.createElement('tr');
+
+// Connect JavaScript to the HTML elements.
+const balanceEl = document.getElementById("balanceAmount");
+const ledgerBody = document.getElementById("ledgerBody");
+const emptyState = document.getElementById("emptyState");
+const countsEl = document.getElementById("counts");
+const statusEl = document.getElementById("statusMsg");
+const depositTotalEl = document.getElementById("depositTotal");
+const withdrawTotalEl = document.getElementById("withdrawTotal");
+const exportCsvBtn = document.getElementById("exportCsvBtn");
+
+const transactionFilter = document.getElementById("transactionFilter");
+const amountSearch = document.getElementById("amountSearch");
+const sortTransactions = document.getElementById("sortTransactions");
+
+// Display the account and transaction history.
+function render() {
+  balanceEl.textContent = fmtCents(myAccount.balanceCents);
+
+  // Clear the old table rows before drawing them again.
+  ledgerBody.innerHTML = "";
+
+  // Read the current filter selections.
+  const selectedType = transactionFilter.value;
+  const searchAmount = amountSearch.value.trim();
+
+  // Convert the search amount into cents.
+  const searchCents =
+    searchAmount === "" ? null : Math.round(Number(searchAmount) * 100);
+
+  // Calculate the running balance using the complete history.
+  let runningBalanceCents = 0;
+
+  const transactionsWithBalances = myAccount.transactions.map(
+    (transaction, index) => {
+      runningBalanceCents +=
+        transaction.type === "deposit"
+          ? transaction.amountCents
+          : -transaction.amountCents;
+
+      return {
+        transaction,
+        index,
+        runningBalanceCents,
+      };
+    },
+  );
+
+  // Apply the selected filters.
+  const filteredTransactions = transactionsWithBalances.filter(
+    ({ transaction }) => {
+      const matchesType =
+        selectedType === "all" || transaction.type === selectedType;
+
+      const matchesAmount =
+        searchCents === null || transaction.amountCents === searchCents;
+
+      return matchesType && matchesAmount;
+    },
+  );
+
+  // Sort the filtered transactions.
+  const sortOrder = sortTransactions.value;
+
+  filteredTransactions.sort((a, b) => {
+    switch (sortOrder) {
+      case "oldest":
+        return a.index - b.index;
+
+      case "highest":
+        return b.transaction.amountCents - a.transaction.amountCents;
+
+      case "lowest":
+        return a.transaction.amountCents - b.transaction.amountCents;
+
+      case "newest":
+      default:
+        return b.index - a.index;
+    }
+  });
+
+  // Display the filtered transactions.
+  filteredTransactions.forEach(
+    ({ transaction, index, runningBalanceCents }) => {
+      const tr = document.createElement("tr");
+
       tr.innerHTML = `
-        <td>${String(i + 1).padStart(2, '0')}</td>
-        <td>${fmtDate(t.date)}</td>
-        <td><span class="tag ${t.type}">${t.type}</span></td>
-        <td class="num">${t.type === 'deposit' ? '+' : '−'}${fmt(t.amount)}</td>
-        <td class="num">${fmt(running)}</td>
+        <td>${String(index + 1).padStart(2, "0")}</td>
+        <td>${fmtDate(transaction.date)}</td>
+        <td>
+          <span class="tag ${transaction.type}">
+            ${transaction.type}
+          </span>
+        </td>
+        <td class="num">
+          ${transaction.type === "deposit" ? "+" : "−"}${fmtCents(transaction.amountCents)}
+        </td>
+        <td class="num">${fmtCents(runningBalanceCents)}</td>
+        <td>
+          <button
+            class="btn-delete"
+            data-id="${transaction.id}"
+            type="button"
+         >
+            Delete
+          </button>
+         </td>
       `;
+
       ledgerBody.appendChild(tr);
-    });
- 
-    const n = myAccount.transactions.length;
-    countsEl.textContent = `${n} ${n === 1 ? 'entry' : 'entries'}`;
-    emptyState.style.display = n === 0 ? 'block' : 'none';
- 
-    const deposits = myAccount.transactions.filter(t => t.type === 'deposit').map(t => t.amount);
-    const withdrawals = myAccount.transactions.filter(t => t.type === 'withdraw').map(t => t.amount);
-    depositTotalEl.textContent = deposits.length ? `Deposits: ${deposits.map(fmt).join(', ')}` : 'Deposits: —';
-    withdrawTotalEl.textContent = withdrawals.length ? `Withdrawals: ${withdrawals.map(fmt).join(', ')}` : 'Withdrawals: —';
+    },
+  );
+
+  // Update the number of visible transactions.
+  const transactionCount = filteredTransactions.length;
+
+  countsEl.textContent = `${transactionCount} ${
+    transactionCount === 1 ? "entry" : "entries"
+  }`;
+
+  // Show an appropriate empty-state message.
+  emptyState.style.display = transactionCount === 0 ? "block" : "none";
+
+  if (myAccount.transactions.length === 0) {
+    emptyState.textContent =
+      "No entries yet — make a deposit to open the ledger.";
+  } else {
+    emptyState.textContent = "No transactions match your filters.";
   }
- 
-  function showStatus(message, kind) {
-    statusEl.textContent = message;
-    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+
+  // Calculate totals using the complete transaction history.
+  const depositTotalCents = myAccount.transactions
+    .filter((transaction) => transaction.type === "deposit")
+    .reduce((total, transaction) => {
+      return total + transaction.amountCents;
+    }, 0);
+
+  const withdrawalTotalCents = myAccount.transactions
+    .filter((transaction) => transaction.type === "withdraw")
+    .reduce((total, transaction) => {
+      return total + transaction.amountCents;
+    }, 0);
+
+  // Display deposit and withdrawal totals.
+  depositTotalEl.textContent = depositTotalCents
+    ? `Deposits: ${fmtCents(depositTotalCents)}`
+    : "Deposits: —";
+
+  withdrawTotalEl.textContent = withdrawalTotalCents
+    ? `Withdrawals: ${fmtCents(withdrawalTotalCents)}`
+    : "Withdrawals: —";
+}
+
+// Display success and error messages.
+function showStatus(message, kind) {
+  statusEl.textContent = message;
+  statusEl.className = "status" + (kind ? ` ${kind}` : "");
+}
+
+// Handle deposits and withdrawals.
+function handleTransaction(type) {
+  const input = document.getElementById(
+    type === "deposit" ? "depositInput" : "withdrawInput",
+  );
+
+  const amount = input.value.trim() === "" ? NaN : Number(input.value);
+
+  if (!Number.isFinite(amount)) {
+    showStatus(`Enter an amount to ${type}.`, "error");
+    return;
   }
- 
-  document.getElementById('depositBtn').addEventListener('click', () => {
-    const input = document.getElementById('depositInput');
-    const amount = parseFloat(input.value);
-    if (isNaN(amount)) {
-      showStatus('Enter an amount to deposit.', 'error');
-      return;
-    }
-    const result = myAccount.deposit(amount);
-    const ok = amount > 0;
-    showStatus(result, ok ? 'success' : 'error');
-    if (ok) input.value = '';
-    render();
-  });
- 
-  document.getElementById('withdrawBtn').addEventListener('click', () => {
-    const input = document.getElementById('withdrawInput');
-    const amount = parseFloat(input.value);
-    if (isNaN(amount)) {
-      showStatus('Enter an amount to withdraw.', 'error');
-      return;
-    }
-    const result = myAccount.withdraw(amount);
-    const success = result.startsWith('Successfully');
-    showStatus(result, success ? 'success' : 'error');
-    if (success) input.value = '';
-    render();
-  });
- 
-  [document.getElementById('depositInput'), document.getElementById('withdrawInput')].forEach(el => {
-    el.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const btnId = el.id === 'depositInput' ? 'depositBtn' : 'withdrawBtn';
-        document.getElementById(btnId).click();
-      }
-    });
-  });
- 
+
+  const result =
+    type === "deposit" ? myAccount.deposit(amount) : myAccount.withdraw(amount);
+
+  const success = result.startsWith("Successfully");
+
+  showStatus(result, success ? "success" : "error");
+
+  if (success) {
+    input.value = "";
+  }
+
+  if (success) {
+    saveAccountData();
+  }
+
   render();
+}
+
+// Deposit button.
+document.getElementById("depositBtn").addEventListener("click", () => {
+  handleTransaction("deposit");
+});
+
+// Withdrawal button.
+document.getElementById("withdrawBtn").addEventListener("click", () => {
+  handleTransaction("withdraw");
+});
+
+exportCsvBtn.addEventListener("click", exportTransactionsToCSV);
+
+// Allow Enter to submit a deposit or withdrawal.
+[
+  document.getElementById("depositInput"),
+  document.getElementById("withdrawInput"),
+].forEach((input) => {
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+
+      const buttonId =
+        input.id === "depositInput" ? "depositBtn" : "withdrawBtn";
+
+      document.getElementById(buttonId).click();
+    }
+  });
+});
+
+// Handle transaction deletion.
+ledgerBody.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest(".btn-delete");
+
+  if (!deleteButton) {
+    return;
+  }
+
+  const transactionId = Number(deleteButton.dataset.id);
+
+  const confirmed = confirm(
+    "Are you sure you want to delete this transaction?",
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const result = myAccount.deleteTransaction(transactionId);
+
+  const success = result === "Transaction deleted successfully.";
+
+  showStatus(result, success ? "success" : "error");
+
+  if (success) {
+    saveAccountData();
+  }
+
+  render();
+});
+
+// Update the ledger when the transaction type changes.
+transactionFilter.addEventListener("change", render);
+
+// Update the ledger while searching by amount.
+amountSearch.addEventListener("input", render);
+
+sortTransactions.addEventListener("change", render);
+// Display the initial account state.
+// Restore saved account data when the application starts.
+loadAccountData();
+
+// Display the restored account information.
+render();
+
+function exportTransactionsToCSV() {
+  const transactions = myAccount.transactions;
+
+  if (transactions.length === 0) {
+    showStatus("There are no transactions to export.", "error");
+    return;
+  }
+
+  const headers = ["ID", "Date", "Type", "Amount", "Balance"];
+
+  let runningBalanceCents = 0;
+
+  const rows = transactions.map((transaction) => {
+    if (transaction.type === "deposit") {
+      runningBalanceCents += transaction.amountCents;
+    } else {
+      runningBalanceCents -= transaction.amountCents;
+    }
+
+    return [
+      transaction.id,
+      transaction.date.toLocaleString(),
+      transaction.type,
+      (transaction.amountCents / 100).toFixed(2),
+      (runningBalanceCents / 100).toFixed(2),
+    ];
+  });
+
+  const csvContent = [headers, ...rows]
+    .map((row) =>
+      row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","),
+    )
+    .join("\n");
+
+  const blob = new Blob([csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = "bank-transactions.csv";
+  link.click();
+
+  URL.revokeObjectURL(url);
+
+  showStatus("Transactions exported successfully.", "success");
+}

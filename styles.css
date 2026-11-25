@@ -192,6 +192,18 @@
 
   .btn-withdraw{ background: var(--withdraw); color: var(--paper); }
   .btn-withdraw:hover{ background: #732f2f; }
+  .btn-delete {
+    background: transparent;
+    color: var(--withdraw);
+    border: 1px solid var(--withdraw);
+    padding: 5px 9px;
+    font-size: 10px;
+  }
+
+.btn-delete:hover {
+  background: var(--withdraw);
+  color: var(--paper);
+}
 
   .status{
     font-family:'IBM Plex Mono', monospace;
@@ -224,6 +236,56 @@
     font-size: 11px;
     color: rgba(29,43,58,0.55);
   }
+
+
+/* Transaction search and filters */
+.ledger-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.filter-field label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(29, 43, 58, 0.6);
+}
+
+.filter-field input,
+.filter-field select {
+  width: 100%;
+  min-width: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--paper-line);
+  background: #fbf9f2;
+  border-radius: 3px;
+  color: var(--ink);
+  outline: none;
+}
+
+.filter-field input:focus,
+.filter-field select:focus {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px rgba(168, 130, 60, 0.18);
+}
+
+@media (max-width: 480px) {
+  .ledger-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 
   table{
     width: 100%;
