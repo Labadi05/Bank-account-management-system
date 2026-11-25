@@ -79,6 +79,7 @@ const countsEl = document.getElementById("counts");
 const statusEl = document.getElementById("statusMsg");
 const depositTotalEl = document.getElementById("depositTotal");
 const withdrawTotalEl = document.getElementById("withdrawTotal");
+const exportCsvBtn = document.getElementById("exportCsvBtn");
 
 const transactionFilter = document.getElementById("transactionFilter");
 const amountSearch = document.getElementById("amountSearch");
@@ -277,6 +278,8 @@ document.getElementById("withdrawBtn").addEventListener("click", () => {
   handleTransaction("withdraw");
 });
 
+exportCsvBtn.addEventListener("click", exportTransactionsToCSV);
+
 // Allow Enter to submit a deposit or withdrawal.
 [
   document.getElementById("depositInput"),
@@ -340,3 +343,53 @@ loadAccountData();
 
 // Display the restored account information.
 render();
+
+function exportTransactionsToCSV() {
+  const transactions = myAccount.transactions;
+
+  if (transactions.length === 0) {
+    showStatus("There are no transactions to export.", "error");
+    return;
+  }
+
+  const headers = ["ID", "Date", "Type", "Amount", "Balance"];
+
+ let runningBalanceCents = 0;
+
+const rows = transactions.map((transaction) => {
+  if (transaction.type === "deposit") {
+    runningBalanceCents += transaction.amountCents;
+  } else {
+    runningBalanceCents -= transaction.amountCents;
+  }
+
+  return [
+    transaction.id,
+    transaction.date.toLocaleString(),
+    transaction.type,
+    (transaction.amountCents / 100).toFixed(2),
+    (runningBalanceCents / 100).toFixed(2)
+  ];
+});
+
+  const csvContent = [headers, ...rows]
+    .map((row) =>
+      row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")
+    )
+    .join("\n");
+
+  const blob = new Blob([csvContent], {
+    type: "text/csv;charset=utf-8;"
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = "bank-transactions.csv";
+  link.click();
+
+  URL.revokeObjectURL(url);
+
+  showStatus("Transactions exported successfully.", "success");
+}
