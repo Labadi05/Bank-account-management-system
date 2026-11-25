@@ -1,9 +1,21 @@
-
 import BankAccount from "./bank-account.js";
 
 const myAccount = new BankAccount();
 
 const STORAGE_KEY = "bankAccountData";
+
+function isValidTransaction(transaction) {
+  return (
+    transaction !== null &&
+    typeof transaction === "object" &&
+    Number.isSafeInteger(transaction.id) &&
+    transaction.id > 0 &&
+    ["deposit", "withdraw"].includes(transaction.type) &&
+    Number.isSafeInteger(transaction.amountCents) &&
+    transaction.amountCents > 0 &&
+    Number.isFinite(Date.parse(transaction.date))
+  );
+}
 
 function loadAccountData() {
   const savedData = localStorage.getItem(STORAGE_KEY);
@@ -15,61 +27,84 @@ function loadAccountData() {
   try {
     const data = JSON.parse(savedData);
 
-    if (!Array.isArray(data.transactions)) {
+    if (
+      !Array.isArray(data.transactions) ||
+      !data.transactions.every(isValidTransaction) ||
+      new Set(data.transactions.map((transaction) => transaction.id)).size !==
+        data.transactions.length
+    ) {
+      console.error("Saved account data contains invalid transactions.");
       return;
     }
 
     // Restore transactions and convert saved dates back into Date objects.
-    myAccount.transactions = data.transactions.map(transaction => ({
+    myAccount.transactions = data.transactions.map((transaction) => ({
       ...transaction,
-      date: new Date(transaction.date)
+      date: new Date(transaction.date),
     }));
 
-    // Recalculate the balance from the restored transaction history.
-    myAccount.balanceCents = myAccount.transactions.reduce(
-      (balance, transaction) => {
-        return transaction.type === "deposit"
-          ? balance + transaction.amountCents
-          : balance - transaction.amountCents;
-      },
-      0
-    );
+    // Recalculate and validate the restored balance.
+    let restoredBalanceCents = 0;
+
+    for (const transaction of myAccount.transactions) {
+      if (transaction.type === "deposit") {
+        restoredBalanceCents += transaction.amountCents;
+      } else {
+        restoredBalanceCents -= transaction.amountCents;
+      }
+
+      if (
+        !Number.isSafeInteger(restoredBalanceCents) ||
+        restoredBalanceCents < 0
+      ) {
+        console.error("Saved account data contains an invalid balance.");
+        myAccount.transactions = [];
+        myAccount.balanceCents = 0;
+        myAccount.nextTransactionId = 1;
+        return;
+      }
+    }
+
+    myAccount.balanceCents = restoredBalanceCents;
 
     // Continue assigning unique transaction IDs.
-    myAccount.nextTransactionId =
-      myAccount.transactions.reduce(
-        (highestId, transaction) => Math.max(highestId, transaction.id),
-        0
-      ) + 1;
+    const highestId = myAccount.transactions.reduce(
+      (highest, transaction) => Math.max(highest, transaction.id),
+      0,
+    );
 
+    if (!Number.isSafeInteger(highestId + 1)) {
+      console.error("Cannot safely generate the next transaction ID.");
+      myAccount.transactions = [];
+      myAccount.balanceCents = 0;
+      myAccount.nextTransactionId = 1;
+      return;
+    }
+
+    myAccount.nextTransactionId = highestId + 1;
   } catch (error) {
     console.error("Could not load saved account data:", error);
   }
 }
 
-
 function saveAccountData() {
   const accountData = {
-    transactions: myAccount.transactions
+    transactions: myAccount.transactions,
   };
 
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(accountData)
-  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(accountData));
 }
 
-
-
 // Format cents as a dollar amount.
-const fmtCents = cents => `$${(cents / 100).toFixed(2)}`;
+const fmtCents = (cents) => `$${(cents / 100).toFixed(2)}`;
 
 // Format transaction dates.
-const fmtDate = date => date.toLocaleDateString(undefined, {
-  year: "numeric",
-  month: "short",
-  day: "numeric"
-});
+const fmtDate = (date) =>
+  date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 
 // Connect JavaScript to the HTML elements.
 const balanceEl = document.getElementById("balanceAmount");
@@ -97,61 +132,59 @@ function render() {
   const searchAmount = amountSearch.value.trim();
 
   // Convert the search amount into cents.
-  const searchCents = searchAmount === ""
-    ? null
-    : Math.round(Number(searchAmount) * 100);
+  const searchCents =
+    searchAmount === "" ? null : Math.round(Number(searchAmount) * 100);
 
   // Calculate the running balance using the complete history.
   let runningBalanceCents = 0;
 
   const transactionsWithBalances = myAccount.transactions.map(
     (transaction, index) => {
-      runningBalanceCents += transaction.type === "deposit"
-        ? transaction.amountCents
-        : -transaction.amountCents;
+      runningBalanceCents +=
+        transaction.type === "deposit"
+          ? transaction.amountCents
+          : -transaction.amountCents;
 
       return {
         transaction,
         index,
-        runningBalanceCents
+        runningBalanceCents,
       };
-    }
+    },
   );
 
- // Apply the selected filters.
-const filteredTransactions = transactionsWithBalances.filter(
-  ({ transaction }) => {
-    const matchesType =
-      selectedType === "all" ||
-      transaction.type === selectedType;
+  // Apply the selected filters.
+  const filteredTransactions = transactionsWithBalances.filter(
+    ({ transaction }) => {
+      const matchesType =
+        selectedType === "all" || transaction.type === selectedType;
 
-    const matchesAmount =
-      searchCents === null ||
-      transaction.amountCents === searchCents;
+      const matchesAmount =
+        searchCents === null || transaction.amountCents === searchCents;
 
-    return matchesType && matchesAmount;
-  }
-);
+      return matchesType && matchesAmount;
+    },
+  );
 
-// Sort the filtered transactions.
-const sortOrder = sortTransactions.value;
+  // Sort the filtered transactions.
+  const sortOrder = sortTransactions.value;
 
-filteredTransactions.sort((a, b) => {
-  switch (sortOrder) {
-    case "oldest":
-      return a.index - b.index;
+  filteredTransactions.sort((a, b) => {
+    switch (sortOrder) {
+      case "oldest":
+        return a.index - b.index;
 
-    case "highest":
-      return b.transaction.amountCents - a.transaction.amountCents;
+      case "highest":
+        return b.transaction.amountCents - a.transaction.amountCents;
 
-    case "lowest":
-      return a.transaction.amountCents - b.transaction.amountCents;
+      case "lowest":
+        return a.transaction.amountCents - b.transaction.amountCents;
 
-    case "newest":
-    default:
-      return b.index - a.index;
-  }
-});
+      case "newest":
+      default:
+        return b.index - a.index;
+    }
+  });
 
   // Display the filtered transactions.
   filteredTransactions.forEach(
@@ -182,7 +215,7 @@ filteredTransactions.sort((a, b) => {
       `;
 
       ledgerBody.appendChild(tr);
-    }
+    },
   );
 
   // Update the number of visible transactions.
@@ -193,27 +226,24 @@ filteredTransactions.sort((a, b) => {
   }`;
 
   // Show an appropriate empty-state message.
-  emptyState.style.display = transactionCount === 0
-    ? "block"
-    : "none";
+  emptyState.style.display = transactionCount === 0 ? "block" : "none";
 
   if (myAccount.transactions.length === 0) {
     emptyState.textContent =
       "No entries yet — make a deposit to open the ledger.";
   } else {
-    emptyState.textContent =
-      "No transactions match your filters.";
+    emptyState.textContent = "No transactions match your filters.";
   }
 
   // Calculate totals using the complete transaction history.
   const depositTotalCents = myAccount.transactions
-    .filter(transaction => transaction.type === "deposit")
+    .filter((transaction) => transaction.type === "deposit")
     .reduce((total, transaction) => {
       return total + transaction.amountCents;
     }, 0);
 
   const withdrawalTotalCents = myAccount.transactions
-    .filter(transaction => transaction.type === "withdraw")
+    .filter((transaction) => transaction.type === "withdraw")
     .reduce((total, transaction) => {
       return total + transaction.amountCents;
     }, 0);
@@ -237,21 +267,18 @@ function showStatus(message, kind) {
 // Handle deposits and withdrawals.
 function handleTransaction(type) {
   const input = document.getElementById(
-    type === "deposit" ? "depositInput" : "withdrawInput"
+    type === "deposit" ? "depositInput" : "withdrawInput",
   );
 
-  const amount = input.value.trim() === ""
-    ? NaN
-    : Number(input.value);
+  const amount = input.value.trim() === "" ? NaN : Number(input.value);
 
   if (!Number.isFinite(amount)) {
     showStatus(`Enter an amount to ${type}.`, "error");
     return;
   }
 
-  const result = type === "deposit"
-    ? myAccount.deposit(amount)
-    : myAccount.withdraw(amount);
+  const result =
+    type === "deposit" ? myAccount.deposit(amount) : myAccount.withdraw(amount);
 
   const success = result.startsWith("Successfully");
 
@@ -262,8 +289,8 @@ function handleTransaction(type) {
   }
 
   if (success) {
-  saveAccountData();
-}
+    saveAccountData();
+  }
 
   render();
 }
@@ -283,15 +310,14 @@ exportCsvBtn.addEventListener("click", exportTransactionsToCSV);
 // Allow Enter to submit a deposit or withdrawal.
 [
   document.getElementById("depositInput"),
-  document.getElementById("withdrawInput")
-].forEach(input => {
-  input.addEventListener("keydown", event => {
+  document.getElementById("withdrawInput"),
+].forEach((input) => {
+  input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
 
-      const buttonId = input.id === "depositInput"
-        ? "depositBtn"
-        : "withdrawBtn";
+      const buttonId =
+        input.id === "depositInput" ? "depositBtn" : "withdrawBtn";
 
       document.getElementById(buttonId).click();
     }
@@ -299,7 +325,7 @@ exportCsvBtn.addEventListener("click", exportTransactionsToCSV);
 });
 
 // Handle transaction deletion.
-ledgerBody.addEventListener("click", event => {
+ledgerBody.addEventListener("click", (event) => {
   const deleteButton = event.target.closest(".btn-delete");
 
   if (!deleteButton) {
@@ -309,7 +335,7 @@ ledgerBody.addEventListener("click", event => {
   const transactionId = Number(deleteButton.dataset.id);
 
   const confirmed = confirm(
-    "Are you sure you want to delete this transaction?"
+    "Are you sure you want to delete this transaction?",
   );
 
   if (!confirmed) {
@@ -323,12 +349,11 @@ ledgerBody.addEventListener("click", event => {
   showStatus(result, success ? "success" : "error");
 
   if (success) {
-  saveAccountData();
-}
+    saveAccountData();
+  }
 
   render();
 });
-
 
 // Update the ledger when the transaction type changes.
 transactionFilter.addEventListener("change", render);
@@ -354,32 +379,32 @@ function exportTransactionsToCSV() {
 
   const headers = ["ID", "Date", "Type", "Amount", "Balance"];
 
- let runningBalanceCents = 0;
+  let runningBalanceCents = 0;
 
-const rows = transactions.map((transaction) => {
-  if (transaction.type === "deposit") {
-    runningBalanceCents += transaction.amountCents;
-  } else {
-    runningBalanceCents -= transaction.amountCents;
-  }
+  const rows = transactions.map((transaction) => {
+    if (transaction.type === "deposit") {
+      runningBalanceCents += transaction.amountCents;
+    } else {
+      runningBalanceCents -= transaction.amountCents;
+    }
 
-  return [
-    transaction.id,
-    transaction.date.toLocaleString(),
-    transaction.type,
-    (transaction.amountCents / 100).toFixed(2),
-    (runningBalanceCents / 100).toFixed(2)
-  ];
-});
+    return [
+      transaction.id,
+      transaction.date.toLocaleString(),
+      transaction.type,
+      (transaction.amountCents / 100).toFixed(2),
+      (runningBalanceCents / 100).toFixed(2),
+    ];
+  });
 
   const csvContent = [headers, ...rows]
     .map((row) =>
-      row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")
+      row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","),
     )
     .join("\n");
 
   const blob = new Blob([csvContent], {
-    type: "text/csv;charset=utf-8;"
+    type: "text/csv;charset=utf-8;",
   });
 
   const url = URL.createObjectURL(blob);
